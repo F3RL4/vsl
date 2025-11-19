@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>📺 VSL Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Coloca um arquivo favicon.ico na raiz do repo -->
+  <link rel="icon" href="favicon.ico">
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      height: 100%;
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+
+    .unmute-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.35);
+      z-index: 10;
+    }
+
+    .unmute-overlay.hidden {
+      display: none;
+    }
+
+    .unmute-button {
+      background: #ffc800;
+      color: #000;
+      border-radius: 14px;
+      padding: 18px 32px;
+      font-family: Arial, sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      text-align: center;
+      cursor: pointer;
+      border: 2px solid #000;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      animation: pulse 1.2s infinite;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .unmute-icon {
+      font-size: 34px;
+      margin-bottom: 4px;
+    }
+
+    .unmute-line-1 {
+      font-size: 15px;
+      letter-spacing: 0.5px;
+    }
+
+    .unmute-line-2 {
+      font-size: 14px;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 200, 0, 0.7);
+      }
+      70% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 16px rgba(255, 200, 0, 0);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 200, 0, 0);
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="video-wrapper">
+  <video id="video" autoplay muted playsinline></video>
+
+  <div class="unmute-overlay" id="unmuteOverlay">
+    <div class="unmute-button">
+      <div class="unmute-icon">🔇</div>
+      <span class="unmute-line-1">¡TU VIDEO YA COMENZÓ!</span>
+      <span class="unmute-line-2">¡HAS CLIC PARA ESCUCHAR!</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('unmuteOverlay');
+  const btn     = overlay.querySelector('.unmute-button');
+  const icon    = overlay.querySelector('.unmute-icon');
+  const line1   = overlay.querySelector('.unmute-line-1');
+  const line2   = overlay.querySelector('.unmute-line-2');
+
+  // pega ?v=vsl_001, ?v=vsl_002, etc
+  const params = new URLSearchParams(window.location.search);
+  const requestedId = params.get('v');
+
+  // *** IMPORTANTE: esta linha é atualizada pelo script add-vsl.ps1 ***
+  const allowed = ['vsl_001'];
+
+  // valida o ID
+  if (!requestedId || !allowed.includes(requestedId)) {
+    // ID inválido: mostra erro e não carrega vídeo nenhum
+    if (icon)  icon.textContent  = '⚠️';
+    if (line1) line1.textContent = 'VIDEO NO ENCONTRADO';
+    if (line2) line2.textContent = 'Revise el enlace o ID vsl_00X';
+
+    // desliga click de unmute / restart
+    btn.style.cursor = 'default';
+    btn.onclick = null;
+    overlay.classList.remove('hidden');
+
+    // esconde o elemento <video> pra não aparecer tela preta
+    video.style.display = 'none';
+
+    // não segue para configurar HLS
+  } else {
+    const videoId = requestedId;
+    const src = `${videoId}/index.m3u8`;
+
+    let hls = null;
+
+    if (Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(src);
+      hls.attachMedia(video);
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari, iOS
+      video.src = src;
+    }
+
+    // autoplay mudo
+    video.muted = true;
+    video.play().catch(() => {});
+
+    function restartAndUnmute() {
+      try { video.pause(); } catch (e) {}
+
+      try { video.currentTime = 0; } catch (e) {}
+
+      video.muted = false;
+      video.volume = 1;
+      video.play().catch(() => {});
+      overlay.classList.add('hidden');
+    }
+
+    overlay.addEventListener('click', () => {
+      if (video.readyState >= 1) {
+        restartAndUnmute();
+      } else {
+        const onLoaded = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          restartAndUnmute();
+        };
+        video.addEventListener('loadedmetadata', onLoaded);
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
+
+
